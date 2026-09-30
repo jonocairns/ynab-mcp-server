@@ -28,6 +28,12 @@ import {
   revokeAllUserGrants,
 } from "../src/ynab-handler.js";
 import { allowedMcpOrigins, rejectUntrustedMcpOrigin } from "../src/mcp-origin.js";
+import {
+  ownerScopedNamespace,
+  sessionOwner,
+  serveOwnedSessions,
+  sessionOwnerKey,
+} from "../src/mcp-session.js";
 import { consentPage, errorPage, finalConsentPage, privacyPage } from "../src/pages.js";
 import { applyTransportSecurityHeaders } from "../src/response-security.js";
 import {
@@ -267,6 +273,89 @@ test("MCP endpoints reject untrusted browser origins before OAuth", async () => 
     error: "invalid_origin",
     error_description: "Browser Origin is not permitted for this MCP endpoint.",
   });
+});
+
+test("session owner is the YNAB user and write choice from the grant", async () => {
+  assert.deepEqual(sessionOwner({ ynabUserId: "u1", writesEnabled: 1 }), { ynabUserId: "u1", writesEnabled: true });
+  assert.deepEqual(sessionOwner({ ynabUserId: "u1" }), { ynabUserId: "u1", writesEnabled: false });
+  for (const props of [undefined, null, {}, { ynabUserId: "" }, { ynabUserId: 7 }]) {
+    assert.equal(sessionOwner(props), null);
+  }
+
+  const key = await sessionOwnerKey({ ynabUserId: "u1", writesEnabled: true });
+  assert.match(key, /^[0-9a-f]{64}$/);
+  assert.equal(await sessionOwnerKey({ ynabUserId: "u1", writesEnabled: true }), key);
+  assert.notEqual(await sessionOwnerKey({ ynabUserId: "u1", writesEnabled: false }), key);
+  assert.notEqual(await sessionOwnerKey({ ynabUserId: "u2", writesEnabled: true }), key);
+});
+
+test("owner-scoped namespace names every session it resolves with the owner key", async () => {
+  const calls = [];
+  const stub = {
+    setName: async (name, props) => calls.push(["setName", name, props]),
+    getInitializeRequest: async () => "init",
+  };
+  const namespace = {
+    newUniqueId: () => "minted",
+    idFromName(name) {
+      calls.push(["idFromName", name]);
+      return `id(${name})`;
+    },
+    get(id) {
+      calls.push(["get", id]);
+      return stub;
+    },
+  };
+  const scoped = ownerScopedNamespace(namespace, "k1");
+
+  assert.equal(scoped.newUniqueId(), "minted");
+  const id = scoped.idFromName("streamable-http:s1");
+  const session = scoped.get(id);
+  await session.setName("streamable-http:s1", { ynabUserId: "alice" });
+  assert.equal(await session.getInitializeRequest(), "init");
+  assert.deepEqual(calls, [
+    ["idFromName", "streamable-http:s1@k1"],
+    ["get", "id(streamable-http:s1@k1)"],
+    ["setName", "streamable-http:s1@k1", { ynabUserId: "alice" }],
+  ]);
+  // Anything else McpAgent might start using fails instead of going unscoped.
+  assert.equal(scoped.getByName, undefined);
+  assert.equal(scoped.jurisdiction, undefined);
+});
+
+test("session ownership hands the MCP handler only the caller's scoped namespace", async () => {
+  const seen = [];
+  const inner = {
+    async fetch(request, env) {
+      seen.push(env.MCP_OBJECT.idFromName("streamable-http:s1"));
+      return new Response("inner");
+    },
+  };
+  const env = { MCP_OBJECT: { newUniqueId: () => "minted", idFromName: (name) => name, get: () => ({}) } };
+  const served = [];
+  const agent = {
+    serve(path, options) {
+      served.push([path, options]);
+      return inner;
+    },
+  };
+  const mcp = serveOwnedSessions(agent, "/mcp");
+  assert.deepEqual(served, [["/mcp", {}]]);
+  const request = () => new Request("https://ynab.tycho.nz/mcp", { method: "POST" });
+
+  assert.equal(await (await mcp.fetch(request(), env, { props: { ynabUserId: "alice", writesEnabled: true } })).text(), "inner");
+  await mcp.fetch(request(), env, { props: { ynabUserId: "bob", writesEnabled: true } });
+  const aliceKey = await sessionOwnerKey({ ynabUserId: "alice", writesEnabled: true });
+  const bobKey = await sessionOwnerKey({ ynabUserId: "bob", writesEnabled: true });
+  assert.deepEqual(seen, [`streamable-http:s1@${aliceKey}`, `streamable-http:s1@${bobKey}`]);
+  assert.equal(env.MCP_OBJECT.idFromName("x"), "x");
+
+  for (const ctx of [{}, { props: {} }, { props: { ynabUserId: "" } }]) {
+    const refused = await mcp.fetch(request(), env, ctx);
+    assert.equal(refused.status, 403);
+    assert.equal(refused.headers.get("cache-control"), "no-store");
+  }
+  assert.equal(seen.length, 2);
 });
 
 test("HTTPS responses carry hostname-scoped HSTS", async () => {

@@ -10,14 +10,20 @@ import { getFreshAccessToken, createKvJournal } from "./ynab-oauth.js";
 
 export class YnabMCP extends McpAgent {
   async init() {
-    const { ynabUserId, writesEnabled } = this.props;
-    const { server } = createYnabServer({
+    // McpAgent's DELETE handler starts a session object without props. That
+    // object was never initialized, so McpAgent answers 404 before any tool
+    // runs; it gets a server without YNAB credentials instead of crashing.
+    const { ynabUserId, writesEnabled } = this.props ?? {};
+    const credentials = ynabUserId ? {
       // Called per outbound YNAB request; handles the 2-hour token expiry by
       // refreshing (and rotating the refresh token) inside the safety window.
       getAccessToken: () => getFreshAccessToken(this.env, ynabUserId),
       hasCredentials: true,
       writesEnabled: !!writesEnabled,
       journal: createKvJournal(this.env, ynabUserId),
+    } : {};
+    const { server } = createYnabServer({
+      ...credentials,
       runtime: {
         tokenSource: { source: "ynab_oauth", source_label: "YNAB OAuth (hosted connector)" },
         detected_agent: "remote",
