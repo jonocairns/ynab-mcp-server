@@ -260,6 +260,74 @@ test("createFsJournal persists entries atomically and reads them back", async (t
   assert.equal(existsSync(`${journalPath}.tmp`), false);
 });
 
+// POSIX modes only; on Windows access comes from the profile folder's ACL.
+test("createFsJournal keeps the journal private to the current user", { skip: process.platform === "win32" }, async (t) => {
+  const { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = mkdtempSync(join(tmpdir(), "ynab-journal-mode-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const mode = (file) => statSync(file).mode & 0o777;
+
+  // A new journal is created private.
+  const journalPath = join(dir, "undo.json");
+  const journal = createFsJournal(journalPath);
+  await journal.persist([{ id: "e1", description: "Payee, -12340" }]);
+  assert.equal(mode(journalPath), 0o600);
+
+  // Replacing a journal someone widened, with a stale world-readable staging
+  // file left by a crash, still leaves only a private journal behind.
+  chmodSync(journalPath, 0o644);
+  writeFileSync(`${journalPath}.tmp`, "stale");
+  chmodSync(`${journalPath}.tmp`, 0o666);
+  await journal.persist([{ id: "e2" }, { id: "e1", description: "Payee, -12340" }]);
+  assert.equal(mode(journalPath), 0o600);
+  assert.equal(existsSync(`${journalPath}.tmp`), false);
+  assert.deepEqual((await journal.read()).map((entry) => entry.id), ["e2", "e1"]);
+
+  // A journal written by an older release is tightened when first read.
+  const legacyPath = join(dir, "legacy.json");
+  writeFileSync(legacyPath, JSON.stringify([{ id: "old" }]));
+  chmodSync(legacyPath, 0o644);
+  assert.deepEqual(await createFsJournal(legacyPath).read(), [{ id: "old" }]);
+  assert.equal(mode(legacyPath), 0o600);
+});
+
+test("list_undo_history reads the journal only when credentials are configured", async () => {
+  const entry = {
+    id: "entry-1",
+    at: "2026-09-30T00:00:00.000Z",
+    tool: "delete_transaction",
+    description: "Deleted transaction t1 (Private Payee, -12340)",
+    undoable: true,
+    undo: { type: "recreate_transaction", transaction: { id: "t1", payee_name: "Private Payee" } },
+  };
+  const reads = [];
+  const journal = {
+    path: "/unused/undo.json",
+    async read() {
+      reads.push("read");
+      return [structuredClone(entry)];
+    },
+    async persist() {},
+  };
+
+  const locked = createYnabServer({ hasCredentials: false, writesEnabled: false, journal });
+  const refused = await locked.internals.invokeRegisteredTool("list_undo_history", {});
+  assert.equal(refused.isError, true);
+  assert.equal(JSON.parse(refused.content[0].text).error, "missing_credentials");
+  assert.doesNotMatch(JSON.stringify(refused), /Private Payee/);
+  assert.deepEqual(reads, []);
+
+  const unlocked = createYnabServer({ hasCredentials: true, writesEnabled: false, journal });
+  const listed = await unlocked.internals.invokeRegisteredTool("list_undo_history", {});
+  assert.equal(listed.isError ?? false, false);
+  const body = JSON.parse(listed.content[0].text);
+  assert.equal(body.count, 1);
+  assert.equal(body.entries[0].description, entry.description);
+  assert.deepEqual(reads, ["read"]);
+});
+
 test("buildYnabUrl only accepts safe absolute API paths", () => {
   assert.equal(
     buildYnabUrl("/plans/abc/transactions").toString(),
