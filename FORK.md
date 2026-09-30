@@ -1,6 +1,6 @@
 # ynab.tycho.nz deployment
 
-This fork runs the hosted connector in `worker/` at **https://ynab.tycho.nz/mcp** for personal use, on the free Workers plan of the `jonocairns@gmail.com` Cloudflare account. The rest of the repository is upstream [oliverames/ynab-mcp-server](https://github.com/oliverames/ynab-mcp-server), unchanged.
+This fork runs the hosted connector in `worker/` at **https://ynab.tycho.nz/mcp** for personal use, on the free Workers plan of my Cloudflare account. The rest of the repository is upstream [oliverames/ynab-mcp-server](https://github.com/oliverames/ynab-mcp-server), unchanged.
 
 ## What differs from upstream
 
