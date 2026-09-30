@@ -6,14 +6,14 @@
   "workers_dev": false,
   "compatibility_date": "2025-03-10",
   "compatibility_flags": ["nodejs_compat"],
-  // Custom domain on the amesvt.com zone: Cloudflare creates the DNS record
+  // Custom domain on the tycho.nz zone: Cloudflare creates the DNS record
   // and certificate automatically at deploy time.
-  "routes": [{ "pattern": "ynab.amesvt.com", "custom_domain": true }],
+  "routes": [{ "pattern": "ynab.tycho.nz", "custom_domain": true }],
   "kv_namespaces": [
     // OAuthProvider grant/client/token storage (props encrypted; tokens hashed),
     // plus this connector's encrypted YNAB token records and undo journals.
     // The id is filled in after `wrangler kv namespace create OAUTH_KV`.
-    { "binding": "OAUTH_KV", "id": "eabb2d32169f4fa68e8d58a61cd45190" }
+    { "binding": "OAUTH_KV", "id": "6655e349d1d84f4b94eb8553fe61a32d" }
   ],
   "durable_objects": {
     "bindings": [
@@ -28,10 +28,10 @@
   ],
   "vars": {
     // Never let the shared stdio module autostart or read local config in the Worker.
-    "CONNECTOR_BASE_URL": "https://ynab.amesvt.com",
+    "CONNECTOR_BASE_URL": "https://ynab.tycho.nz",
     // Explicit browser origins allowed to call the MCP transport. Native and
     // server-to-server clients omit Origin and remain supported.
-    "MCP_ALLOWED_ORIGINS": "https://chatgpt.com,https://claude.ai,https://claude.com,https://chat.mistral.ai,https://lechat.mistral.ai",
+    "MCP_ALLOWED_ORIGINS": "https://claude.ai,https://claude.com",
     "YNAB_MCP_NO_AUTOSTART": "1",
     "YNAB_DISABLE_AGENT_CONFIG_FALLBACK": "1"
   }

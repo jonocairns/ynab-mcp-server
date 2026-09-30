@@ -132,7 +132,7 @@ test("hosted connector uses the exact Codex plugin icon and conventional favicon
   assert.equal(WORKS_WITH_YNAB_SOURCE_URL, "https://api.ynab.com/papi/works_with_ynab.svg");
   assert.deepEqual(CONNECTOR_RESOURCE_METADATA, {
     resource: CONNECTOR_MCP_URL,
-    authorization_servers: ["https://ynab.amesvt.com"],
+    authorization_servers: ["https://ynab.tycho.nz"],
     scopes_supported: ["read", "write"],
     bearer_methods_supported: ["header"],
     resource_name: "YNAB",
@@ -141,12 +141,12 @@ test("hosted connector uses the exact Codex plugin icon and conventional favicon
   assert.equal(REMOTE_SERVER_INFO.title, "YNAB");
   assert.deepEqual(REMOTE_SERVER_INFO.icons, [
     {
-      src: "https://ynab.amesvt.com/assets/ynab-tree-icon-v1.png",
+      src: "https://ynab.tycho.nz/assets/ynab-tree-icon-v1.png",
       mimeType: "image/png",
       sizes: ["256x256"],
     },
     {
-      src: "https://ynab.amesvt.com/assets/icon.png",
+      src: "https://ynab.tycho.nz/assets/icon.png",
       mimeType: "image/png",
       sizes: ["1024x1024"],
     },
@@ -169,7 +169,7 @@ test("hosted connector uses the exact Codex plugin icon and conventional favicon
     ["/assets/ynab-tree-icon-v1.png", "image/png", CONNECTOR_FAVICON_256_PNG_SHA256],
   ];
   for (const [path, contentType, expectedSha256] of assets) {
-    const response = await YnabHandler.request(`https://ynab.amesvt.com${path}`);
+    const response = await YnabHandler.request(`https://ynab.tycho.nz${path}`);
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") ?? "", new RegExp(`^${contentType.replace("+", "\\+")}(?:;|$)`));
     assert.equal(
@@ -185,7 +185,7 @@ test("hosted connector uses the exact Codex plugin icon and conventional favicon
     const body = Buffer.from(await response.arrayBuffer());
     assert.equal(createHash("sha256").update(body).digest("hex"), expectedSha256);
 
-    const conditional = await YnabHandler.request(`https://ynab.amesvt.com${path}`, {
+    const conditional = await YnabHandler.request(`https://ynab.tycho.nz${path}`, {
       headers: { "If-None-Match": response.headers.get("etag") },
     });
     assert.equal(conditional.status, 304);
@@ -205,7 +205,7 @@ test("favicon.ico stays small enough for icon resolvers", () => {
 });
 
 test("landing page advertises the connector icon", async () => {
-  const response = await YnabHandler.request("https://ynab.amesvt.com/");
+  const response = await YnabHandler.request("https://ynab.tycho.nz/");
   const body = await response.text();
   // The square tree favicon leads, with a small ICO as the alternate. Icon
   // resolvers take the first usable declaration, so nothing large or ambiguous
@@ -217,7 +217,7 @@ test("landing page advertises the connector icon", async () => {
   // The "Works with YNAB" wordmark is 196x78 and must never be advertised as a
   // favicon; only the square tree artwork may be.
   assert.doesNotMatch(body, /rel="[^"]*icon"[^>]+works-with-ynab/);
-  assert.match(body, /<meta property="og:image" content="https:\/\/ynab\.amesvt\.com\/assets\/icon\.png">/);
+  assert.match(body, /<meta property="og:image" content="https:\/\/ynab\.tycho\.nz\/assets\/icon\.png">/);
   assert.match(body, /<meta property="og:image:width" content="1024">/);
   assert.match(body, /<meta property="og:image:height" content="1024">/);
   assert.match(body, /<img class="brand" src="\/assets\/works-with-ynab\.svg"/);
@@ -226,7 +226,7 @@ test("landing page advertises the connector icon", async () => {
 });
 
 test("HTML CSP defaults forms to the connector origin", async () => {
-  const response = await YnabHandler.request("https://ynab.amesvt.com/");
+  const response = await YnabHandler.request("https://ynab.tycho.nz/");
   const policy = response.headers.get("content-security-policy") ?? "";
 
   assert.match(policy, /form-action 'self'(?:;|$)/);
@@ -234,28 +234,28 @@ test("HTML CSP defaults forms to the connector origin", async () => {
 
 test("MCP endpoints reject untrusted browser origins before OAuth", async () => {
   const env = {
-    CONNECTOR_BASE_URL: "https://ynab.amesvt.com",
+    CONNECTOR_BASE_URL: "https://ynab.tycho.nz",
     MCP_ALLOWED_ORIGINS: "https://chatgpt.com, https://claude.ai",
   };
 
   assert.deepEqual(
     allowedMcpOrigins(env),
-    new Set(["https://ynab.amesvt.com", "https://chatgpt.com", "https://claude.ai"])
+    new Set(["https://ynab.tycho.nz", "https://chatgpt.com", "https://claude.ai"])
   );
   assert.equal(
-    rejectUntrustedMcpOrigin(new Request("https://ynab.amesvt.com/mcp"), env),
+    rejectUntrustedMcpOrigin(new Request("https://ynab.tycho.nz/mcp"), env),
     null
   );
   assert.equal(
-    rejectUntrustedMcpOrigin(new Request("https://ynab.amesvt.com/mcp", {
+    rejectUntrustedMcpOrigin(new Request("https://ynab.tycho.nz/mcp", {
       headers: { Origin: "https://chatgpt.com" },
     }), env), null);
   assert.equal(
-    rejectUntrustedMcpOrigin(new Request("https://ynab.amesvt.com/privacy", {
+    rejectUntrustedMcpOrigin(new Request("https://ynab.tycho.nz/privacy", {
       headers: { Origin: "https://example.invalid" },
     }), env), null);
 
-  const response = rejectUntrustedMcpOrigin(new Request("https://ynab.amesvt.com/mcp", {
+  const response = rejectUntrustedMcpOrigin(new Request("https://ynab.tycho.nz/mcp", {
     method: "POST",
     headers: { Origin: "https://example.invalid" },
   }), env);
@@ -270,12 +270,12 @@ test("MCP endpoints reject untrusted browser origins before OAuth", async () => 
 });
 
 test("HTTPS responses carry hostname-scoped HSTS", async () => {
-  const secureRequest = new Request("https://ynab.amesvt.com/privacy");
+  const secureRequest = new Request("https://ynab.tycho.nz/privacy");
   const secureResponse = applyTransportSecurityHeaders(secureRequest, new Response("ok"));
   assert.equal(secureResponse.headers.get("strict-transport-security"), "max-age=31536000");
   assert.equal(await secureResponse.text(), "ok");
 
-  const insecureRequest = new Request("http://ynab.amesvt.com/privacy");
+  const insecureRequest = new Request("http://ynab.tycho.nz/privacy");
   const insecureResponse = applyTransportSecurityHeaders(insecureRequest, new Response("ok"));
   assert.equal(insecureResponse.headers.get("strict-transport-security"), null);
 });
@@ -344,7 +344,7 @@ test("consent and error pages escape untrusted content", () => {
 test("authorize URL uses YNAB PKCE S256 and minimum read-only scope", () => {
   const url = new URL(buildYnabAuthorizeUrl({
     clientId: "client-id",
-    redirectUri: "https://ynab.amesvt.com/callback",
+    redirectUri: "https://ynab.tycho.nz/callback",
     state: "state",
     codeChallenge: "challenge",
     readOnly: true,
@@ -532,11 +532,11 @@ test("consent request is opaque, single-use, and redirects to YNAB", async () =>
     state: "client-state",
     codeChallenge: "client-pkce",
     codeChallengeMethod: "S256",
-    resource: "https://ynab.amesvt.com/mcp",
+    resource: "https://ynab.tycho.nz/mcp",
   };
   const env = {
     COOKIE_ENCRYPTION_KEY: COOKIE_KEY,
-    CONNECTOR_BASE_URL: "https://ynab.amesvt.com",
+    CONNECTOR_BASE_URL: "https://ynab.tycho.nz",
     YNAB_CLIENT_ID: "ynab-client-id",
     OAUTH_KV: kv,
     OAUTH_STATE: transient,
@@ -578,7 +578,7 @@ test("consent request is opaque, single-use, and redirects to YNAB", async () =>
   assert.equal(location.origin, "https://app.ynab.com");
   assert.equal(location.searchParams.get("scope"), "read-only");
   assert.equal(location.searchParams.get("code_challenge_method"), "S256");
-  assert.equal(location.searchParams.get("redirect_uri"), "https://ynab.amesvt.com/callback");
+  assert.equal(location.searchParams.get("redirect_uri"), "https://ynab.tycho.nz/callback");
   assert.equal(transient.records.has(`consent:${consentId}`), false);
 
   const replay = await YnabHandler.request("https://untrusted-preview.example/authorize", {
@@ -595,7 +595,7 @@ test("server-side consent tokens reject tamper and cross-consent without cookies
   let requestNumber = 0;
   const env = {
     COOKIE_ENCRYPTION_KEY: COOKIE_KEY,
-    CONNECTOR_BASE_URL: "https://ynab.amesvt.com",
+    CONNECTOR_BASE_URL: "https://ynab.tycho.nz",
     YNAB_CLIENT_ID: "ynab-client-id",
     OAUTH_KV: kv,
     OAUTH_STATE: new MemoryTransientNamespace(),
@@ -672,7 +672,7 @@ test("authorization forms require the configured same origin without consuming c
   const state = new MemoryTransientNamespace();
   const env = {
     COOKIE_ENCRYPTION_KEY: COOKIE_KEY,
-    CONNECTOR_BASE_URL: "https://ynab.amesvt.com",
+    CONNECTOR_BASE_URL: "https://ynab.tycho.nz",
     YNAB_CLIENT_ID: "ynab-client-id",
     OAUTH_KV: kv,
     OAUTH_STATE: state,
@@ -759,7 +759,7 @@ test("atomic transient state allows only one concurrent consent and callback", a
   const state = new MemoryTransientNamespace();
   const env = {
     COOKIE_ENCRYPTION_KEY: COOKIE_KEY,
-    CONNECTOR_BASE_URL: "https://ynab.amesvt.com",
+    CONNECTOR_BASE_URL: "https://ynab.tycho.nz",
     YNAB_CLIENT_ID: "ynab-client-id",
     OAUTH_KV: kv,
     OAUTH_STATE: state,
@@ -812,7 +812,7 @@ test("YNAB callback completes through a native client scheme after final confirm
   const env = {
     COOKIE_ENCRYPTION_KEY: COOKIE_KEY,
     DATA_ENCRYPTION_KEY: DATA_KEY,
-    CONNECTOR_BASE_URL: "https://ynab.amesvt.com",
+    CONNECTOR_BASE_URL: "https://ynab.tycho.nz",
     YNAB_CLIENT_ID: "ynab-client-id",
     YNAB_CLIENT_SECRET: "ynab-client-secret",
     OAUTH_KV: kv,
@@ -968,7 +968,7 @@ test("overlapping YNAB approvals validate cookie-free state and reject replay", 
   let requestNumber = 0;
   const env = {
     COOKIE_ENCRYPTION_KEY: COOKIE_KEY,
-    CONNECTOR_BASE_URL: "https://ynab.amesvt.com",
+    CONNECTOR_BASE_URL: "https://ynab.tycho.nz",
     YNAB_CLIENT_ID: "ynab-client-id",
     OAUTH_KV: kv,
     OAUTH_STATE: new MemoryTransientNamespace(),

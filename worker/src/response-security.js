@@ -1,7 +1,7 @@
 const HSTS_VALUE = "max-age=31536000";
 
 // HSTS is deliberately scoped to this hostname. Do not add includeSubDomains
-// because this connector does not control every amesvt.com subdomain.
+// because this connector does not control every tycho.nz subdomain.
 export function applyTransportSecurityHeaders(request, response) {
   if (new URL(request.url).protocol !== "https:") return response;
 
