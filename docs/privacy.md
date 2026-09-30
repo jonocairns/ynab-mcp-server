@@ -1,6 +1,6 @@
 # Privacy Policy for MCP Server for YNAB
 
-Last Updated: July 15, 2026
+Last Updated: September 30, 2026
 
 MCP Server for YNAB is a local stdio MCP server that runs on the user's machine or in a user-controlled MCP host. It connects the user's MCP client to the YNAB API.
 
@@ -14,7 +14,7 @@ Write tools are disabled by default. They are registered only when `YNAB_ALLOW_W
 
 ## Data Storage
 
-This package does not create a database and does not store YNAB budget data outside the running MCP process. It returns YNAB API responses to the connected MCP client so the client can answer the user's request.
+This package does not create a database. It returns YNAB API responses to the connected MCP client so the client can answer the user's request. The only YNAB budget data it keeps outside the running MCP process is the local undo journal described below.
 
 Authentication is configured by the user through one of these local mechanisms:
 
@@ -25,6 +25,15 @@ Authentication is configured by the user through one of these local mechanisms:
 - Claude Code local plaintext settings in `~/.claude/settings.json`
 
 The server does not ask for, handle, or store bank credentials or other financial account login credentials.
+
+### Local Undo Journal
+
+When write tools are enabled, each transaction write the server makes is recorded in a local undo journal so `undo_operation` can reverse it later, including after the MCP process restarts. Nothing is recorded while write tools are disabled, which is the default.
+
+- **Location:** `.ynab-mcp-undo.json` in the user's home directory (`~/.ynab-mcp-undo.json`; on Windows, usually `%USERPROFILE%\.ynab-mcp-undo.json`). While the journal is being rewritten, a short-lived `.ynab-mcp-undo.json.tmp` exists beside it.
+- **Contents:** the 100 most recent entries. Each entry holds its time, the tool that made the write, the budget ID, a description that can include a payee name and amount, and the IDs of the affected transactions. For an update, it also holds the previous values of the fields that changed (account, date, amount, payee, category, memo, cleared and approved state, and flag). For a deletion, it holds a full copy of the deleted transaction so it can be recreated.
+- **Access:** on macOS and Linux the journal and its temporary file are readable and writable only by the current user (file mode `0600`); journals created by earlier releases are tightened to `0600` the next time the server reads them. On Windows, access follows the permissions of the user's profile folder.
+- **Sharing:** the journal is never sent anywhere. `list_undo_history` and `undo_operation` return its entries to the connected MCP client, and only when YNAB credentials are configured.
 
 ## Data Sharing
 
@@ -38,11 +47,12 @@ The server redacts bearer tokens and authorization headers from surfaced errors.
 
 ## Deleting Data
 
-Because this local package does not persist YNAB budget data, there is no server-side data store to delete. To stop future access:
+This local package has no server-side data store. To stop future access and remove the data it keeps locally:
 
 1. Remove the MCP server from the MCP host configuration.
 2. Delete any local token file or environment variable used for `YNAB_API_TOKEN`.
 3. Revoke the personal access token in YNAB Developer Settings.
+4. Delete the local undo journal once the MCP server has stopped, for example with `rm -f ~/.ynab-mcp-undo.json ~/.ynab-mcp-undo.json.tmp` (on Windows, delete both files from `%USERPROFILE%`). This also removes the ability to reverse earlier writes with `undo_operation`.
 
 For the hosted OAuth connector, use `https://ynab.amesvt.com/delete` to revoke connector grants and remove its stored token and undo records.
 
@@ -50,7 +60,7 @@ For the hosted OAuth connector, use `https://ynab.amesvt.com/delete` to revoke c
 
 For package support, security questions, or data-handling questions, open an issue at https://github.com/oliverames/ynab-mcp-server/issues or contact Oliver Ames through https://ames.consulting.
 
-Because this local package does not operate a server-side data store, data deletion requests usually mean helping the user remove local configuration and revoke the YNAB access token. Hosted connector deletion requests are handled through its public deletion flow.
+Because this local package does not operate a server-side data store, data deletion requests usually mean helping the user remove local configuration, delete the local undo journal, and revoke the YNAB access token. Hosted connector deletion requests are handled through its public deletion flow.
 
 ## Children
 

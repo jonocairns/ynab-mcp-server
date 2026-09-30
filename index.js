@@ -2,7 +2,7 @@
 
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -462,8 +462,12 @@ function buildYnabAuthSetupGuide(agent) {
 // The factory takes an injected async journal interface; this is the local-fs
 // implementation the stdio bootstrap uses (~/.ynab-mcp-undo.json). The journal
 // lives outside the budget, so it survives restarts but never leaves this machine.
+// It holds payee names, amounts, and whole deleted transactions, so the
+// staging file and the journal are private to the current user (0600); see
+// docs/privacy.md.
 
 const UNDO_JOURNAL_MAX_ENTRIES = 100;
+const UNDO_JOURNAL_FILE_MODE = 0o600;
 
 function undoJournalPath() {
   return path.join(userHomeDir(), ".ynab-mcp-undo.json");
@@ -482,8 +486,21 @@ function createFsJournal(filePath) {
   return {
     path: filePath,
     async read() {
+      let raw;
       try {
-        const parsed = JSON.parse(readFileSync(filePath, "utf8"));
+        raw = readFileSync(filePath, "utf8");
+      } catch {
+        return [];
+      }
+      // Journals written before files were created private may still be
+      // readable by other users; tighten them on first use.
+      try {
+        chmodSync(filePath, UNDO_JOURNAL_FILE_MODE);
+      } catch {
+        // Best effort: reading must not fail on a file we cannot chmod.
+      }
+      try {
+        const parsed = JSON.parse(raw);
         return Array.isArray(parsed) ? parsed : [];
       } catch {
         return [];
@@ -492,9 +509,16 @@ function createFsJournal(filePath) {
     async persist(entries) {
       // Write-then-rename in the same directory: a crash mid-write must not
       // leave a torn file, which readUndoJournal would silently treat as an
-      // empty journal and lose every recorded entry.
+      // empty journal and lose every recorded entry. The rename carries the
+      // staging file's 0600 mode over any existing journal. A staging file
+      // left by a crash keeps its old mode, so it is removed and created
+      // afresh rather than reused.
       const tmpPath = `${filePath}.tmp`;
-      writeFileSync(tmpPath, JSON.stringify(entries.slice(0, UNDO_JOURNAL_MAX_ENTRIES), null, 2));
+      rmSync(tmpPath, { force: true });
+      writeFileSync(tmpPath, JSON.stringify(entries.slice(0, UNDO_JOURNAL_MAX_ENTRIES), null, 2), {
+        mode: UNDO_JOURNAL_FILE_MODE,
+        flag: "wx",
+      });
       renameSync(tmpPath, filePath);
     },
   };
@@ -3630,7 +3654,9 @@ registerTool(
   { description: "Read local write journal, newest first, with undo capability. No API request. undoable:false entries are audit-only. Use entry IDs with undo_operation.", inputSchema: {
     limit: z.number().int().positive().max(UNDO_JOURNAL_MAX_ENTRIES).optional().describe("Maximum entries to return (default 20, newest first)"),
   } },
-  async ({ limit }) => {
+  ({ limit }) => run(async () => {
+    // Behind run() like every other protected tool: without a configured
+    // token the journal's transaction details stay unread.
     if (!journal) {
       return ok({ count: 0, journal_path: null, entries: [], note: "undo journal unavailable in this deployment" });
     }
@@ -3647,7 +3673,7 @@ registerTool(
         undone: !!e.undone,
       })),
     });
-  }
+  })
 );
 
 registerTool(

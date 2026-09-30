@@ -505,7 +505,7 @@ The YNAB API has no category merge/delete endpoint and cannot split an already-i
 
 ### Undo Journal (v4.0)
 
-Every transaction write (create, update, bulk update, approve, reassign, delete, and the category workflows) is journaled to a local file (`~/.ynab-mcp-undo.json`, last 100 entries) with before-state.
+Every transaction write (create, update, bulk update, approve, reassign, delete, and the category workflows) is journaled to a local file (`~/.ynab-mcp-undo.json`, last 100 entries) with before-state. The file is private to the current user (`0600`) and `list_undo_history` requires configured YNAB credentials; see [docs/privacy.md](docs/privacy.md#local-undo-journal) for exactly what it stores and how to delete it.
 
 | Tool | Description |
 |------|-------------|
