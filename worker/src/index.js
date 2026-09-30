@@ -1,11 +1,13 @@
 // Entry point: OAuth 2.1 provider wrapping the MCP endpoints.
 // /mcp (streamable HTTP, current standard) and /sse (legacy) require a valid
 // connector token; everything else falls through to the Hono handler
-// (landing, consent, YNAB OAuth dance, privacy, deletion).
+// (landing, consent, YNAB OAuth dance, privacy, deletion). Both MCP routes
+// only resume a session for the identity that initialized it.
 
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { CONNECTOR_RESOURCE_METADATA } from "./brand-assets.js";
 import { rejectUntrustedMcpOrigin } from "./mcp-origin.js";
+import { MCP_API_HANDLERS } from "./mcp-routes.js";
 import { applyTransportSecurityHeaders } from "./response-security.js";
 import { YnabMCP } from "./ynab-mcp.js";
 import { OAuthTransientState } from "./oauth-transient-state.js";
@@ -14,10 +16,7 @@ import { YnabHandler } from "./ynab-handler.js";
 export { YnabMCP, OAuthTransientState };
 
 const oauthProvider = new OAuthProvider({
-  apiHandlers: {
-    "/mcp": YnabMCP.serve("/mcp"),
-    "/sse": YnabMCP.serveSSE("/sse"),
-  },
+  apiHandlers: MCP_API_HANDLERS,
   defaultHandler: YnabHandler,
   authorizeEndpoint: "/authorize",
   tokenEndpoint: "/token",

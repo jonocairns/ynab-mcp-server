@@ -18,6 +18,12 @@ Not affiliated with YNAB.
   exact code the local stdio server runs. Every tool also returns the same
   app-client contract: human-readable title, input/output schemas, matching
   `structuredContent`, and private/bounded impact hints.
+- Sessions are keyed by owner as well as ID: the Worker scopes every session
+  name to the YNAB user and write choice of the grant presenting it
+  ([`src/mcp-session.js`](src/mcp-session.js)). Another grant presenting the
+  same `Mcp-Session-Id` reaches a different, uninitialized session and gets
+  `404 Session not found`; a legacy SSE `sessionId` only ever reaches the
+  caller's own sessions.
 - The consent page redirects to YNAB's own OAuth with PKCE S256. Consent and
   callback state use 192-bit opaque values, keyed hashes, one-time KV records,
   and 10-minute TTLs without depending on browser cookies. Access tokens last 2
